@@ -1,11 +1,11 @@
-package com.example.myapplication
+package com.example.myapplication.data
 
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TaskEntity::class, InspectionEntity::class], version = 4)
+@Database(entities = [TaskEntity::class, InspectionEntity::class], version = 7)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun apiDao(): ApiDao
 
