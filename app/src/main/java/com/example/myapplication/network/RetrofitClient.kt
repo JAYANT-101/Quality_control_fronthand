@@ -8,7 +8,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 
 object RetrofitClient {
-    private const val BASE_URL = "https://api.example.com/" // Placeholder URL
+    private const val BASE_URL = "http://10.0.2.2:5000/" // Local Flask server for Emulator
 
     private val json = Json {
         ignoreUnknownKeys = true

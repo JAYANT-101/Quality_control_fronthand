@@ -13,12 +13,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.data.UserData
 
 @Composable
-fun LoginScreen(onLoginSuccess: () -> Unit) {
+fun LoginScreen(
+    viewModel: LoginViewModel,
+    onLoginSuccess: (UserData) -> Unit
+) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var showError by remember { mutableStateOf(false) }
+    
+    val state = viewModel.state
+
+    LaunchedEffect(state) {
+        if (state is LoginState.Success) {
+            onLoginSuccess(state.userData)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -52,46 +63,56 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
                 OutlinedTextField(
                     value = username,
-                    onValueChange = { username = it; showError = false },
-                    label = { Text("Inspector ID") },
+                    onValueChange = { 
+                        username = it
+                        viewModel.resetError()
+                    },
+                    label = { Text("Username") },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                    singleLine = true
+                    singleLine = true,
+                    enabled = state !is LoginState.Loading
                 )
 
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it; showError = false },
+                    onValueChange = { 
+                        password = it
+                        viewModel.resetError()
+                    },
                     label = { Text("Password") },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true
+                    singleLine = true,
+                    enabled = state !is LoginState.Loading
                 )
 
-                if (showError) {
+                if (state is LoginState.Error) {
                     Text(
-                        "Invalid ID or Password",
+                        state.message,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
 
                 Button(
-                    onClick = {
-                        // Mock login logic
-                        if (username == "104" && password == "admin") {
-                            onLoginSuccess()
-                        } else {
-                            showError = true
-                        }
-                    },
+                    onClick = { viewModel.login(username, password) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),
-                    shape = MaterialTheme.shapes.large
+                    shape = MaterialTheme.shapes.large,
+                    enabled = state !is LoginState.Loading
                 ) {
-                    Text("LOGIN", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    if (state is LoginState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("LOGIN", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

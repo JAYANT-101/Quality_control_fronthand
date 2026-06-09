@@ -21,5 +21,6 @@ data class InspectionEntity(
     val task_id: String,
     val line_no: Int,
     val result: String,
-    val defect_type: String?
+    val defect_type: String?,
+    val checker_id: Int
 )

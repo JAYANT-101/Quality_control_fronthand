@@ -26,7 +26,7 @@ import com.example.myapplication.data.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainTabletLayout() {
+fun MainTabletLayout(userSession: UserSession) {
     var selectedLine by remember { mutableIntStateOf(1) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -59,7 +59,8 @@ fun MainTabletLayout() {
                     task_id = po,
                     line_no = selectedLine,
                     result = result,
-                    defect_type = defectType
+                    defect_type = defectType,
+                    checker_id = userSession.userId
                 )
             )
         }
@@ -69,7 +70,9 @@ fun MainTabletLayout() {
         Box(modifier = Modifier.fillMaxHeight().width(120.dp)) {
             NavigationRailLayout(
                 selectedLine = selectedLine,
-                onLineSelected = { selectedLine = it }
+                onLineSelected = { selectedLine = it },
+                userName = userSession.username,
+                userId = userSession.userId
             )
         }
 
@@ -91,7 +94,12 @@ fun MainTabletLayout() {
 }
 
 @Composable
-fun NavigationRailLayout(selectedLine: Int, onLineSelected: (Int) -> Unit) {
+fun NavigationRailLayout(
+    selectedLine: Int,
+    onLineSelected: (Int) -> Unit,
+    userName: String,
+    userId: Int
+) {
     NavigationRail(
         modifier = Modifier.fillMaxHeight(),
         containerColor = Color(0xFF1A1A1A),
@@ -103,9 +111,16 @@ fun NavigationRailLayout(selectedLine: Int, onLineSelected: (Int) -> Unit) {
                 tint = Color(0xFFBB86FC)
             )
             Text(
-                "Inspector ID: 104",
-                fontSize = 12.sp,
+                userName,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
                 color = Color.White,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Text(
+                "ID: $userId",
+                fontSize = 12.sp,
+                color = Color.Gray,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
         }
@@ -526,6 +541,6 @@ fun DoneDialog(onDismiss: () -> Unit) {
 @Composable
 fun PreviewMainTabletLayout() {
     MaterialTheme {
-        MainTabletLayout()
+        MainTabletLayout(userSession = UserSession(104, "checker"))
     }
 }
