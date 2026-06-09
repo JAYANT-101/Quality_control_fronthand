@@ -67,7 +67,7 @@ fun LoginScreen(
                         username = it
                         viewModel.resetError()
                     },
-                    label = { Text("Inspector ID") },
+                    label = { Text("Username") },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     singleLine = true,
