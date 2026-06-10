@@ -13,23 +13,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.data.UserData
 
 @Composable
 fun LoginScreen(
-    viewModel: LoginViewModel,
-    onLoginSuccess: (UserData) -> Unit
+    viewModel: LoginViewModel
 ) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    
     val state = viewModel.state
-
-    LaunchedEffect(state) {
-        if (state is LoginState.Success) {
-            onLoginSuccess(state.userData)
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -62,9 +51,9 @@ fun LoginScreen(
                 )
 
                 OutlinedTextField(
-                    value = username,
+                    value = viewModel.usernameInput,
                     onValueChange = { 
-                        username = it
+                        viewModel.usernameInput = it
                         viewModel.resetError()
                     },
                     label = { Text("Username") },
@@ -75,9 +64,9 @@ fun LoginScreen(
                 )
 
                 OutlinedTextField(
-                    value = password,
+                    value = viewModel.passwordInput,
                     onValueChange = { 
-                        password = it
+                        viewModel.passwordInput = it
                         viewModel.resetError()
                     },
                     label = { Text("Password") },
@@ -97,7 +86,7 @@ fun LoginScreen(
                 }
 
                 Button(
-                    onClick = { viewModel.login(username, password) },
+                    onClick = { viewModel.login() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),

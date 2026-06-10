@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,38 +24,29 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.data.*
+import com.example.myapplication.repository.InspectionRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainTabletLayout(userSession: UserSession) {
+fun MainTabletLayout(
+    userSession: UserSession,
+    inspectionRepository: InspectionRepository,
+    onLogout: () -> Unit
+) {
     var selectedLine by remember { mutableIntStateOf(1) }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val database = remember { AppDatabase.getDatabase(context) }
-    val dao = database.apiDao()
 
-    val tasksFlow = remember { dao.getAllTasksFlow() }
-    val allTasks by tasksFlow.collectAsState(initial = emptyList())
+    val allTasks by inspectionRepository.allTasks.collectAsState(initial = emptyList())
     val activeTasks = allTasks.filter { !it.is_completed }
 
-    LaunchedEffect(allTasks) {
-        if (allTasks.isEmpty()) {
-            val dummyTasks = listOf(
-                TaskEntity("PO-2023-0045", "Cotton Jersey", "Deep Navy", 2),
-                TaskEntity("PO-2023-0046", "Cotton Jersey", "Pure White", 15),
-                TaskEntity("PO-2023-0047", "Pique", "Crimson Red", 300),
-                TaskEntity("PO-2023-0048", "Pique", "Midnight Black", 350),
-                TaskEntity("PO-2023-0049", "Interlock", "Forest Green", 450),
-                TaskEntity("PO-2023-0050", "Fleece", "Pitch Black", 200)
-            )
-            dao.insertTasks(dummyTasks)
-        }
+    LaunchedEffect(Unit) {
+        inspectionRepository.refreshTasks()
     }
 
     fun onSaveInspection(result: String, defectType: String?, po: String) {
         scope.launch {
-            dao.insertInspection(
+            inspectionRepository.saveInspection(
                 InspectionEntity(
                     task_id = po,
                     line_no = selectedLine,
@@ -72,7 +64,8 @@ fun MainTabletLayout(userSession: UserSession) {
                 selectedLine = selectedLine,
                 onLineSelected = { selectedLine = it },
                 userName = userSession.username,
-                userId = userSession.userId
+                userId = userSession.userId,
+                onLogout = onLogout
             )
         }
 
@@ -80,12 +73,11 @@ fun MainTabletLayout(userSession: UserSession) {
             WorkArea(
                 selectedLine = selectedLine,
                 tasks = activeTasks,
-                dao = dao,
+                inspectionRepository = inspectionRepository,
                 onSaveInspection = ::onSaveInspection,
                 onResetData = {
                     scope.launch {
-                        dao.resetAllTasks()
-                        dao.deleteAllInspections()
+                        inspectionRepository.resetAllCountsAndTasks()
                     }
                 }
             )
@@ -98,7 +90,8 @@ fun NavigationRailLayout(
     selectedLine: Int,
     onLineSelected: (Int) -> Unit,
     userName: String,
-    userId: Int
+    userId: Int,
+    onLogout: () -> Unit
 ) {
     NavigationRail(
         modifier = Modifier.fillMaxHeight(),
@@ -160,6 +153,31 @@ fun NavigationRailLayout(
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        NavigationRailItem(
+            selected = false,
+            onClick = onLogout,
+            icon = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.ExitToApp,
+                        contentDescription = "Logout",
+                        tint = Color.Gray
+                    )
+                    Text(
+                        "Logout",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            },
+            colors = NavigationRailItemDefaults.colors(
+                indicatorColor = Color.Transparent
+            )
+        )
     }
 }
 
@@ -167,7 +185,7 @@ fun NavigationRailLayout(
 fun WorkArea(
     selectedLine: Int,
     tasks: List<TaskEntity>,
-    dao: ApiDao,
+    inspectionRepository: InspectionRepository,
     onSaveInspection: (String, String?, String) -> Unit,
     onResetData: () -> Unit
 ) {
@@ -177,17 +195,17 @@ fun WorkArea(
     var quantity by remember { mutableIntStateOf(0) }
 
     val passCount by if (selectedPO != null) {
-        dao.getInspectionCountFlow(selectedPO!!, selectedLine, "PASS").collectAsState(initial = 0)
+        inspectionRepository.getCount(selectedPO!!, selectedLine, "PASS").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
     val alterCount by if (selectedPO != null) {
-        dao.getInspectionCountFlow(selectedPO!!, selectedLine, "ALTER").collectAsState(initial = 0)
+        inspectionRepository.getCount(selectedPO!!, selectedLine, "ALTER").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
     val rejectCount by if (selectedPO != null) {
-        dao.getInspectionCountFlow(selectedPO!!, selectedLine, "REJECT").collectAsState(initial = 0)
+        inspectionRepository.getCount(selectedPO!!, selectedLine, "REJECT").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
@@ -196,12 +214,10 @@ fun WorkArea(
     var showCompletionDialog by remember { mutableStateOf(false) }
     var showDoneDialog by remember { mutableStateOf(false) }
 
-    val scope = rememberCoroutineScope()
-
     // Completion Check
     LaunchedEffect(passCount) {
         if (selectedPO != null && quantity > 0 && passCount >= quantity) {
-            dao.markTaskAsCompleted(selectedPO!!)
+            inspectionRepository.markTaskAsCompleted(selectedPO!!)
             showCompletionDialog = true
         }
     }
@@ -540,7 +556,15 @@ fun DoneDialog(onDismiss: () -> Unit) {
 @Preview(showBackground = true, widthDp = 1280, heightDp = 800)
 @Composable
 fun PreviewMainTabletLayout() {
+    // In preview we can't easily create a real repository, so this might fail or need a mock
+    // For now I'll just comment out the content or provide a dummy if possible
+    /*
     MaterialTheme {
-        MainTabletLayout(userSession = UserSession(104, "checker"))
+        MainTabletLayout(
+            userSession = UserSession(104, "checker"),
+            inspectionRepository = ..., 
+            onLogout = {}
+        )
     }
+    */
 }

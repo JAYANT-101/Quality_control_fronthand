@@ -1,44 +1,66 @@
 package com.example.myapplication.repository
 
+import com.example.myapplication.data.AuthResponse
+import com.example.myapplication.data.AuthResult
 import com.example.myapplication.data.LoginRequest
-import com.example.myapplication.data.LoginResponse
-import com.example.myapplication.network.ApiService
+import com.example.myapplication.network.AuthApiClient
 import kotlinx.serialization.json.Json
 import retrofit2.Response
 
-class AuthRepository(private val apiService: ApiService) {
+class AuthRepository(private val authApiClient: AuthApiClient) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun authorize(request: LoginRequest): Result<LoginResponse> {
+    suspend fun login(usernameInput: String, passwordInput: String): AuthResult {
         return try {
-            val response = apiService.authorize(request)
+            val response = authApiClient.authorize(LoginRequest(usernameInput, passwordInput))
+            handleAuthResponse(response)
+        } catch (e: Exception) {
+            AuthResult(isSuccess = false, message = "Connection failed: ${e.message}")
+        }
+    }
+
+    suspend fun verifySession(): AuthResult {
+        return try {
+            val response = authApiClient.getSession()
+            handleAuthResponse(response)
+        } catch (e: Exception) {
+            AuthResult(isSuccess = false, message = "Connection failed: ${e.message}")
+        }
+    }
+
+    suspend fun logout(): AuthResult {
+        return try {
+            val response = authApiClient.logout()
             if (response.isSuccessful) {
-                val body = response.body()
-                if (body != null && body.authorized) {
-                    Result.success(body)
-                } else {
-                    Result.failure(Exception(body?.errors?.firstOrNull() ?: "Unknown error"))
-                }
+                AuthResult(isSuccess = true)
             } else {
-                val errorBody = response.errorBody()?.string()
-                val errorResponse = errorBody?.let {
-                    try {
-                        json.decodeFromString<LoginResponse>(it)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-                val errorMessage = errorResponse?.errors?.firstOrNull() ?: when (response.code()) {
-                    401 -> "Invalid username or password"
-                    400 -> "Validation error"
-                    500 -> "Server error"
-                    else -> "Network error: ${response.code()}"
-                }
-                Result.failure(Exception(errorMessage))
+                AuthResult(isSuccess = false, message = "Logout failed")
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Connection failed: ${e.message}"))
+            AuthResult(isSuccess = false, message = "Connection failed: ${e.message}")
+        }
+    }
+
+    private fun handleAuthResponse(response: Response<AuthResponse>): AuthResult {
+        return if (response.isSuccessful) {
+            val body = response.body()
+            if (body != null && body.authorized && body.data != null) {
+                AuthResult(isSuccess = true, user = body.data)
+            } else {
+                AuthResult(isSuccess = false, message = body?.errors?.firstOrNull() ?: "Session invalid")
+            }
+        } else {
+            val errorBody = response.errorBody()?.string()
+            val errorResponse = errorBody?.let {
+                try {
+                    json.decodeFromString<AuthResponse>(it)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val errorMessage = errorResponse?.errors?.firstOrNull() ?: "Session expired or invalid"
+            AuthResult(isSuccess = false, message = errorMessage)
         }
     }
 }

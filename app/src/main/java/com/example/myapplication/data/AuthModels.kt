@@ -9,18 +9,24 @@ data class LoginRequest(
 )
 
 @Serializable
-data class LoginResponse(
+data class AuthResponse(
     val status: String,
     val authorized: Boolean,
     val message: String? = null,
-    val data: UserData? = null,
-    val errors: List<String>? = null
+    val errors: List<String>? = null,
+    val data: AuthorizedUser? = null
 )
 
 @Serializable
-data class UserData(
+data class AuthorizedUser(
     val user_id: Int,
     val username: String
+)
+
+data class AuthResult(
+    val isSuccess: Boolean,
+    val user: AuthorizedUser? = null,
+    val message: String? = null
 )
 
 data class UserSession(
