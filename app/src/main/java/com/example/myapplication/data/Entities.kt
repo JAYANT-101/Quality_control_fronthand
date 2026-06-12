@@ -9,7 +9,6 @@ import kotlinx.serialization.Serializable
 data class TaskEntity(
     @PrimaryKey val po_number: String,
     val cloth_type: String,
-    val color: String,
     val target: Int,
     val is_completed: Boolean = false
 )

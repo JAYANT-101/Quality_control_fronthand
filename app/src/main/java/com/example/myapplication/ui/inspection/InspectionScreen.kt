@@ -191,7 +191,6 @@ fun WorkArea(
 ) {
     var selectedPO by remember { mutableStateOf<String?>(null) }
     var selectedFabric by remember { mutableStateOf<String?>(null) }
-    var selectedColor by remember { mutableStateOf<String?>(null) }
     var quantity by remember { mutableIntStateOf(0) }
 
     val passCount by if (selectedPO != null) {
@@ -264,13 +263,6 @@ fun WorkArea(
                 modifier = Modifier.weight(1f)
             )
             DropdownFilter(
-                label = "Color",
-                options = tasks.map { it.color }.distinct(),
-                selectedOption = selectedColor,
-                onOptionSelected = { selectedColor = it },
-                modifier = Modifier.weight(1f)
-            )
-            DropdownFilter(
                 label = "PO Number",
                 options = tasks.map { it.po_number },
                 selectedOption = selectedPO,
@@ -278,7 +270,6 @@ fun WorkArea(
                     selectedPO = po
                     val task = tasks.find { it.po_number == po }
                     selectedFabric = task?.cloth_type
-                    selectedColor = task?.color
                     quantity = task?.target ?: 0
                 },
                 modifier = Modifier.weight(1f)
@@ -367,7 +358,6 @@ fun WorkArea(
                 showCompletionDialog = false
                 selectedPO = null
                 selectedFabric = null
-                selectedColor = null
                 quantity = 0
             }
         )
