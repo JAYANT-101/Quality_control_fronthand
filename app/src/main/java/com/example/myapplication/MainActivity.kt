@@ -15,6 +15,7 @@ import com.example.myapplication.data.AppDatabase
 import com.example.myapplication.data.UserSession
 import com.example.myapplication.network.RetrofitClient
 import com.example.myapplication.repository.AuthRepository
+import com.example.myapplication.repository.CheckerOutputRepository
 import com.example.myapplication.repository.InspectionRepository
 import com.example.myapplication.repository.PoRepository
 import com.example.myapplication.session.SessionManager
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var loginViewModel: LoginViewModel
     private lateinit var inspectionRepository: InspectionRepository
     private lateinit var poRepository: PoRepository
+    private lateinit var checkerOutputRepository: CheckerOutputRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +42,7 @@ class MainActivity : ComponentActivity() {
         val database = AppDatabase.getDatabase(this)
         inspectionRepository = InspectionRepository(database.apiDao(), sessionManager)
         poRepository = PoRepository(RetrofitClient.poApiService, sessionManager)
+        checkerOutputRepository = CheckerOutputRepository(RetrofitClient.checkerOutputApiService)
 
         setContent {
             InspectionTheme {
@@ -65,6 +68,7 @@ class MainActivity : ComponentActivity() {
                             userSession = UserSession(user.user_id, user.username),
                             inspectionRepository = inspectionRepository,
                             poRepository = poRepository,
+                            checkerOutputRepository = checkerOutputRepository,
                             onLogout = {
                                 scope.launch {
                                     sessionManager.logout()

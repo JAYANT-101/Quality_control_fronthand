@@ -72,4 +72,8 @@ object RetrofitClient {
     val poApiService: PoApiService by lazy {
         retrofit.create(PoApiService::class.java)
     }
+
+    val checkerOutputApiService: CheckerOutputApiService by lazy {
+        retrofit.create(CheckerOutputApiService::class.java)
+    }
 }

@@ -22,10 +22,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.data.*
 import com.example.myapplication.repository.InspectionRepository
 import com.example.myapplication.repository.PoRepository
+import com.example.myapplication.repository.CheckerOutputRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +37,7 @@ fun MainTabletLayout(
     userSession: UserSession,
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
+    checkerOutputRepository: CheckerOutputRepository,
     onLogout: () -> Unit
 ) {
     var selectedLine by remember { mutableIntStateOf(1) }
@@ -46,8 +51,11 @@ fun MainTabletLayout(
         inspectionRepository.refreshTasks()
     }
 
-    fun onSaveInspection(result: String, defectType: String?, po: String) {
+    fun onSaveInspection(result: String, defectType: String?, po: String, poId: Int) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        
         scope.launch {
+            // 1. Save locally
             inspectionRepository.saveInspection(
                 InspectionEntity(
                     task_id = po,
@@ -57,6 +65,18 @@ fun MainTabletLayout(
                     checker_id = userSession.userId
                 )
             )
+
+            // 2. Submit to backend
+            val request = CheckerOutputRequest(
+                userId = userSession.userId,
+                line = selectedLine,
+                poId = poId,
+                fieldName = result.lowercase(), // "pass", "reject", or "alter"
+                defectName = defectType ?: "",
+                actualEventTime = timestamp
+            )
+            
+            checkerOutputRepository.submitCheckerOutput(request)
         }
     }
 
@@ -77,6 +97,7 @@ fun MainTabletLayout(
                 tasks = activeTasks,
                 inspectionRepository = inspectionRepository,
                 poRepository = poRepository,
+                checkerOutputRepository = checkerOutputRepository,
                 onSaveInspection = ::onSaveInspection,
                 onResetData = {
                     scope.launch {
@@ -190,7 +211,8 @@ fun WorkArea(
     tasks: List<TaskEntity>,
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
-    onSaveInspection: (String, String?, String) -> Unit,
+    checkerOutputRepository: CheckerOutputRepository,
+    onSaveInspection: (String, String?, String, Int) -> Unit,
     onResetData: () -> Unit
 ) {
     var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -198,6 +220,7 @@ fun WorkArea(
     var poNumbers by remember { mutableStateOf<List<PoNumberItem>>(emptyList()) }
     var selectedPoNumber by remember { mutableStateOf<String?>(null) }
     var selectedPoTarget by remember { mutableStateOf<Int?>(null) }
+    var selectedPoId by remember { mutableStateOf<Int?>(null) }
 
     var isLoadingProductTypes by remember { mutableStateOf(false) }
     var isLoadingPoNumbers by remember { mutableStateOf(false) }
@@ -225,6 +248,7 @@ fun WorkArea(
             // poNumbers = emptyList() // DO NOT clear it here, wait for result
             selectedPoNumber = null
             selectedPoTarget = null
+            selectedPoId = null
 
             poRepository.fetchPoNumbers(selectedProductType!!)
                 .onSuccess {
@@ -329,6 +353,7 @@ fun WorkArea(
                     val selectedItem = poNumbers.find { "${it.poNumber} (target: ${it.target})" == selectedLabel }
                     selectedPoNumber = selectedItem?.poNumber
                     selectedPoTarget = selectedItem?.target
+                    selectedPoId = selectedItem?.poId
                 },
                 modifier = Modifier.weight(1f),
                 enabled = selectedProductType != null && !isLoadingPoNumbers
@@ -365,8 +390,8 @@ fun WorkArea(
                 text = "PASS",
                 color = passColor,
                 onClick = {
-                    selectedPoNumber?.let {
-                        onSaveInspection("PASS", null, it)
+                    if (selectedPoNumber != null && selectedPoId != null) {
+                        onSaveInspection("PASS", null, selectedPoNumber!!, selectedPoId!!)
                         if (passCount + 1 < (selectedPoTarget ?: 0)) {
                             doneDialogColor = passColor
                             showDoneDialog = true
@@ -374,31 +399,31 @@ fun WorkArea(
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null
+                enabled = selectedPoNumber != null && selectedPoId != null
             )
             ActionButton(
                 text = "ALTER",
                 color = alterColor,
                 onClick = {
-                    if (selectedPoNumber != null) {
+                    if (selectedPoNumber != null && selectedPoId != null) {
                         showDefectDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null
+                enabled = selectedPoNumber != null && selectedPoId != null
             )
             ActionButton(
                 text = "REJECT",
                 color = rejectColor,
                 onClick = {
-                    selectedPoNumber?.let {
-                        onSaveInspection("REJECT", null, it)
+                    if (selectedPoNumber != null && selectedPoId != null) {
+                        onSaveInspection("REJECT", null, selectedPoNumber!!, selectedPoId!!)
                         doneDialogColor = rejectColor
                         showDoneDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null
+                enabled = selectedPoNumber != null && selectedPoId != null
             )
         }
     }
@@ -407,8 +432,8 @@ fun WorkArea(
         DefectDialog(
             onDismiss = { showDefectDialog = false },
             onDefectSelected = { defect ->
-                selectedPoNumber?.let {
-                    onSaveInspection("ALTER", defect, it)
+                if (selectedPoNumber != null && selectedPoId != null) {
+                    onSaveInspection("ALTER", defect, selectedPoNumber!!, selectedPoId!!)
                 }
                 showDefectDialog = false
                 doneDialogColor = Color(0xFFFFB300) // ALTER color
@@ -424,6 +449,7 @@ fun WorkArea(
                 showCompletionDialog = false
                 selectedPoNumber = null
                 selectedPoTarget = null
+                selectedPoId = null
             }
         )
     }

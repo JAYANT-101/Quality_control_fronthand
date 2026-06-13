@@ -16,6 +16,7 @@ data class PoNumbersResponse(
 
 @Serializable
 data class PoNumberItem(
+    @SerialName("po_id") val poId: Int,
     @SerialName("po_number") val poNumber: String,
     @SerialName("target") val target: Int
 )
