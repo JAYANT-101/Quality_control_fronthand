@@ -25,12 +25,14 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.data.*
 import com.example.myapplication.repository.InspectionRepository
+import com.example.myapplication.repository.PoRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainTabletLayout(
     userSession: UserSession,
     inspectionRepository: InspectionRepository,
+    poRepository: PoRepository,
     onLogout: () -> Unit
 ) {
     var selectedLine by remember { mutableIntStateOf(1) }
@@ -74,6 +76,7 @@ fun MainTabletLayout(
                 selectedLine = selectedLine,
                 tasks = activeTasks,
                 inspectionRepository = inspectionRepository,
+                poRepository = poRepository,
                 onSaveInspection = ::onSaveInspection,
                 onResetData = {
                     scope.launch {
@@ -186,25 +189,70 @@ fun WorkArea(
     selectedLine: Int,
     tasks: List<TaskEntity>,
     inspectionRepository: InspectionRepository,
+    poRepository: PoRepository,
     onSaveInspection: (String, String?, String) -> Unit,
     onResetData: () -> Unit
 ) {
-    var selectedPO by remember { mutableStateOf<String?>(null) }
-    var selectedFabric by remember { mutableStateOf<String?>(null) }
-    var quantity by remember { mutableIntStateOf(0) }
+    var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedProductType by remember { mutableStateOf<String?>(null) }
+    var poNumbers by remember { mutableStateOf<List<PoNumberItem>>(emptyList()) }
+    var selectedPoNumber by remember { mutableStateOf<String?>(null) }
+    var selectedPoTarget by remember { mutableStateOf<Int?>(null) }
 
-    val passCount by if (selectedPO != null) {
-        inspectionRepository.getCount(selectedPO!!, selectedLine, "PASS").collectAsState(initial = 0)
+    var isLoadingProductTypes by remember { mutableStateOf(false) }
+    var isLoadingPoNumbers by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+
+    // Fetch product types on launch
+    LaunchedEffect(Unit) {
+        isLoadingProductTypes = true
+        poRepository.fetchProductTypes()
+            .onSuccess {
+                productTypes = it
+                errorMessage = null
+            }
+            .onFailure {
+                errorMessage = it.message
+            }
+        isLoadingProductTypes = false
+    }
+
+    LaunchedEffect(selectedProductType) {
+        if (selectedProductType != null) {
+            isLoadingPoNumbers = true
+            // poNumbers = emptyList() // DO NOT clear it here, wait for result
+            selectedPoNumber = null
+            selectedPoTarget = null
+
+            poRepository.fetchPoNumbers(selectedProductType!!)
+                .onSuccess {
+                    println("InspectionScreen: Successfully updated poNumbers state with ${it.size} items for $selectedProductType")
+                    poNumbers = it
+                    errorMessage = null
+                }
+                .onFailure {
+                    println("InspectionScreen: Failed to fetch poNumbers: ${it.message}")
+                    errorMessage = it.message
+                    poNumbers = emptyList()
+                }
+            isLoadingPoNumbers = false
+        }
+    }
+
+    val passCount by if (selectedPoNumber != null) {
+        inspectionRepository.getCount(selectedPoNumber!!, selectedLine, "PASS").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
-    val alterCount by if (selectedPO != null) {
-        inspectionRepository.getCount(selectedPO!!, selectedLine, "ALTER").collectAsState(initial = 0)
+    val alterCount by if (selectedPoNumber != null) {
+        inspectionRepository.getCount(selectedPoNumber!!, selectedLine, "ALTER").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
-    val rejectCount by if (selectedPO != null) {
-        inspectionRepository.getCount(selectedPO!!, selectedLine, "REJECT").collectAsState(initial = 0)
+    val rejectCount by if (selectedPoNumber != null) {
+        inspectionRepository.getCount(selectedPoNumber!!, selectedLine, "REJECT").collectAsState(initial = 0)
     } else {
         remember { mutableStateOf(0) }
     }
@@ -212,11 +260,12 @@ fun WorkArea(
     var showDefectDialog by remember { mutableStateOf(false) }
     var showCompletionDialog by remember { mutableStateOf(false) }
     var showDoneDialog by remember { mutableStateOf(false) }
+    var doneDialogColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
 
     // Completion Check
     LaunchedEffect(passCount) {
-        if (selectedPO != null && quantity > 0 && passCount >= quantity) {
-            inspectionRepository.markTaskAsCompleted(selectedPO!!)
+        if (selectedPoNumber != null && (selectedPoTarget ?: 0) > 0 && passCount >= (selectedPoTarget ?: 0)) {
+            inspectionRepository.markTaskAsCompleted(selectedPoNumber!!)
             showCompletionDialog = true
         }
     }
@@ -251,28 +300,38 @@ fun WorkArea(
 
         Spacer(modifier = Modifier.height(16.dp))
         Divider(color = Color(0xFF00BFA5), thickness = 2.dp)
+        
+        if (errorMessage != null) {
+            Text(
+                errorMessage!!,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
 
         // Filters
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             DropdownFilter(
-                label = "Cloth Type",
-                options = tasks.map { it.cloth_type }.distinct(),
-                selectedOption = selectedFabric,
-                onOptionSelected = { selectedFabric = it },
-                modifier = Modifier.weight(1f)
+                label = "Product Type",
+                options = productTypes,
+                selectedOption = selectedProductType,
+                onOptionSelected = { selectedProductType = it },
+                modifier = Modifier.weight(1f),
+                enabled = !isLoadingProductTypes
             )
             DropdownFilter(
                 label = "PO Number",
-                options = tasks.map { it.po_number },
-                selectedOption = selectedPO,
-                onOptionSelected = { po ->
-                    selectedPO = po
-                    val task = tasks.find { it.po_number == po }
-                    selectedFabric = task?.cloth_type
-                    quantity = task?.target ?: 0
+                options = poNumbers.map { "${it.poNumber} (target: ${it.target})" },
+                selectedOption = if (selectedPoNumber != null) "$selectedPoNumber (target: $selectedPoTarget)" else null,
+                onOptionSelected = { selectedLabel ->
+                    val selectedItem = poNumbers.find { "${it.poNumber} (target: ${it.target})" == selectedLabel }
+                    selectedPoNumber = selectedItem?.poNumber
+                    selectedPoTarget = selectedItem?.target
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = selectedProductType != null && !isLoadingPoNumbers
             )
         }
 
@@ -285,9 +344,9 @@ fun WorkArea(
             shape = MaterialTheme.shapes.medium
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
-                InfoRow("Current Target:", quantity.toString(), Color.Gray, Color(0xFF00BFA5))
+                InfoRow("Current Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5))
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow("Selected PO:", selectedPO ?: "Not Selected", Color.Gray, Color(0xFF00BFA5))
+                InfoRow("Selected PO:", selectedPoNumber ?: "Not Selected", Color.Gray, Color(0xFF00BFA5))
             }
         }
 
@@ -298,42 +357,48 @@ fun WorkArea(
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            val passColor = Color(0xFF4CAF50)
+            val alterColor = Color(0xFFFFB300)
+            val rejectColor = Color(0xFFF44336)
+
             ActionButton(
                 text = "PASS",
-                color = Color(0xFF4CAF50),
+                color = passColor,
                 onClick = {
-                    selectedPO?.let {
+                    selectedPoNumber?.let {
                         onSaveInspection("PASS", null, it)
-                        if (passCount + 1 < quantity) {
+                        if (passCount + 1 < (selectedPoTarget ?: 0)) {
+                            doneDialogColor = passColor
                             showDoneDialog = true
                         }
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPO != null
+                enabled = selectedPoNumber != null
             )
             ActionButton(
                 text = "ALTER",
-                color = Color(0xFFFFB300),
+                color = alterColor,
                 onClick = {
-                    if (selectedPO != null) {
+                    if (selectedPoNumber != null) {
                         showDefectDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPO != null
+                enabled = selectedPoNumber != null
             )
             ActionButton(
                 text = "REJECT",
-                color = Color(0xFFF44336),
+                color = rejectColor,
                 onClick = {
-                    selectedPO?.let {
+                    selectedPoNumber?.let {
                         onSaveInspection("REJECT", null, it)
+                        doneDialogColor = rejectColor
                         showDoneDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPO != null
+                enabled = selectedPoNumber != null
             )
         }
     }
@@ -342,10 +407,11 @@ fun WorkArea(
         DefectDialog(
             onDismiss = { showDefectDialog = false },
             onDefectSelected = { defect ->
-                selectedPO?.let {
+                selectedPoNumber?.let {
                     onSaveInspection("ALTER", defect, it)
                 }
                 showDefectDialog = false
+                doneDialogColor = Color(0xFFFFB300) // ALTER color
                 showDoneDialog = true
             }
         )
@@ -353,18 +419,20 @@ fun WorkArea(
 
     if (showCompletionDialog) {
         CompletionDialog(
-            poNumber = selectedPO ?: "",
+            poNumber = selectedPoNumber ?: "",
             onDismiss = {
                 showCompletionDialog = false
-                selectedPO = null
-                selectedFabric = null
-                quantity = 0
+                selectedPoNumber = null
+                selectedPoTarget = null
             }
         )
     }
 
     if (showDoneDialog && !showCompletionDialog) {
-        DoneDialog(onDismiss = { showDoneDialog = false })
+        DoneDialog(
+            color = doneDialogColor,
+            onDismiss = { showDoneDialog = false }
+        )
     }
 }
 
@@ -412,40 +480,55 @@ fun DropdownFilter(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    ExposedDropdownMenuBox(
-        expanded = expanded && enabled,
-        onExpandedChange = { if (enabled) expanded = !expanded },
-        modifier = modifier
-    ) {
+    Box(modifier = modifier) {
         OutlinedTextField(
             value = selectedOption ?: "",
             onValueChange = {},
             readOnly = true,
             label = { Text(label, color = Color.Gray) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+            trailingIcon = { 
+                IconButton(onClick = { if (enabled) expanded = true }) {
+                    Icon(
+                        if (expanded) Icons.Default.CheckCircle else Icons.Default.AccountCircle, // Placeholder for arrows
+                        contentDescription = null,
+                        tint = Color.Gray
+                    )
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray,
                 focusedBorderColor = Color.White,
                 unfocusedLabelColor = Color.Gray,
-                focusedLabelColor = Color.White
+                focusedLabelColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedTextColor = Color.White
             ),
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().clickable { if (enabled) expanded = true },
             enabled = enabled
         )
 
-        ExposedDropdownMenu(
-            expanded = expanded && enabled,
+        DropdownMenu(
+            expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(Color(0xFF333333))
+            modifier = Modifier
+                .background(Color(0xFF333333))
+                .fillMaxWidth(0.4f) // Adjust width as needed
         ) {
-            options.forEach { option ->
+            if (options.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text(option, color = Color.White) },
-                    onClick = {
-                        onOptionSelected(option)
-                        expanded = false
-                    }
+                    text = { Text("No items (loading...)", color = Color.Gray) },
+                    onClick = { expanded = false }
                 )
+            } else {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option, color = Color.White) },
+                        onClick = {
+                            onOptionSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }
@@ -514,7 +597,7 @@ fun CompletionDialog(poNumber: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun DoneDialog(onDismiss: () -> Unit) {
+fun DoneDialog(color: Color, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         delay(1500)
         onDismiss()
@@ -524,7 +607,7 @@ fun DoneDialog(onDismiss: () -> Unit) {
         Card(
             modifier = Modifier.width(240.dp),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50))
+            colors = CardDefaults.cardColors(containerColor = color)
         ) {
             Box(
                 modifier = Modifier

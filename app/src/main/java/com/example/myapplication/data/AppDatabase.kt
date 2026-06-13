@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TaskEntity::class, InspectionEntity::class], version = 9)
+@Database(entities = [TaskEntity::class, InspectionEntity::class], version = 10)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun apiDao(): ApiDao
 

@@ -16,6 +16,7 @@ import com.example.myapplication.data.UserSession
 import com.example.myapplication.network.RetrofitClient
 import com.example.myapplication.repository.AuthRepository
 import com.example.myapplication.repository.InspectionRepository
+import com.example.myapplication.repository.PoRepository
 import com.example.myapplication.session.SessionManager
 import com.example.myapplication.ui.inspection.MainTabletLayout
 import com.example.myapplication.ui.login.LoginScreen
@@ -24,16 +25,21 @@ import com.example.myapplication.ui.theme.InspectionTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private lateinit var sessionManager: SessionManager
+    private lateinit var loginViewModel: LoginViewModel
+    private lateinit var inspectionRepository: InspectionRepository
+    private lateinit var poRepository: PoRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val authRepository = AuthRepository(RetrofitClient.authApiClient)
-        val sessionManager = SessionManager(authRepository)
-        val loginViewModel = LoginViewModel(authRepository, sessionManager)
+        sessionManager = SessionManager(authRepository)
+        loginViewModel = LoginViewModel(authRepository, sessionManager)
         
-        val apiService = RetrofitClient.apiService
         val database = AppDatabase.getDatabase(this)
-        val inspectionRepository = InspectionRepository(database.apiDao(), apiService, sessionManager)
+        inspectionRepository = InspectionRepository(database.apiDao(), sessionManager)
+        poRepository = PoRepository(RetrofitClient.poApiService, sessionManager)
 
         setContent {
             InspectionTheme {
@@ -58,6 +64,7 @@ class MainActivity : ComponentActivity() {
                         MainTabletLayout(
                             userSession = UserSession(user.user_id, user.username),
                             inspectionRepository = inspectionRepository,
+                            poRepository = poRepository,
                             onLogout = {
                                 scope.launch {
                                     sessionManager.logout()

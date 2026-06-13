@@ -15,8 +15,8 @@ class SessionManager(private val authRepository: AuthRepository) {
     var skipVerifyNextAction = false
 
     suspend fun verifySessionBeforeAction(): Boolean {
-        if (skipVerifyNextAction && isAuthorized) {
-            skipVerifyNextAction = false
+        if (isAuthorized) {
+            isInitializing = false
             return true
         }
         
