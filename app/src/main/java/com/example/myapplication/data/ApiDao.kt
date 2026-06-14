@@ -9,22 +9,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ApiDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTasks(tasks: List<TaskEntity>)
-
-    @Query("SELECT * FROM tasks")
-    suspend fun getAllTasks(): List<TaskEntity>
-
-    @Query("SELECT * FROM tasks")
-    fun getAllTasksFlow(): Flow<List<TaskEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInspection(log: InspectionEntity)
-
-    @Query("UPDATE tasks SET is_completed = 1 WHERE po_number = :poNumber")
-    suspend fun markTaskAsCompleted(poNumber: String)
-
-    @Query("UPDATE tasks SET is_completed = 0")
-    suspend fun resetAllTasks()
 
     @Query("DELETE FROM inspections")
     suspend fun deleteAllInspections()

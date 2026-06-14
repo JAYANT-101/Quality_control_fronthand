@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,18 +41,11 @@ fun MainTabletLayout(
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
     checkerOutputRepository: CheckerOutputRepository,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
 ) {
     var selectedLine by remember { mutableIntStateOf(1) }
 
     val scope = rememberCoroutineScope()
-
-    val allTasks by inspectionRepository.allTasks.collectAsState(initial = emptyList())
-    val activeTasks = allTasks.filter { !it.is_completed }
-
-    LaunchedEffect(Unit) {
-        inspectionRepository.refreshTasks()
-    }
 
     fun onSaveInspection(result: String, defectType: String?, po: String, poId: Int) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
@@ -58,12 +54,12 @@ fun MainTabletLayout(
             // 1. Save locally
             inspectionRepository.saveInspection(
                 InspectionEntity(
-                    task_id = po,
-                    line_no = selectedLine,
+                    taskId = po,
+                    lineNo = selectedLine,
                     result = result,
-                    defect_type = defectType,
-                    checker_id = userSession.userId
-                )
+                    defectType = defectType,
+                    checkerId = userSession.userId,
+                ),
             )
 
             // 2. Submit to backend
@@ -73,7 +69,7 @@ fun MainTabletLayout(
                 poId = poId,
                 fieldName = result.lowercase(), // "pass", "reject", or "alter"
                 defectName = defectType ?: "",
-                actualEventTime = timestamp
+                actualEventTime = timestamp,
             )
             
             checkerOutputRepository.submitCheckerOutput(request)
@@ -87,24 +83,21 @@ fun MainTabletLayout(
                 onLineSelected = { selectedLine = it },
                 userName = userSession.username,
                 userId = userSession.userId,
-                onLogout = onLogout
+                onLogout = onLogout,
             )
         }
 
         Box(modifier = Modifier.fillMaxHeight().weight(1f)) {
             WorkArea(
                 selectedLine = selectedLine,
-                tasks = activeTasks,
                 inspectionRepository = inspectionRepository,
                 poRepository = poRepository,
-                checkerOutputRepository = checkerOutputRepository,
                 onSaveInspection = ::onSaveInspection,
-                onResetData = {
-                    scope.launch {
-                        inspectionRepository.resetAllCountsAndTasks()
-                    }
+            ) {
+                scope.launch {
+                    inspectionRepository.resetAllCountsAndTasks()
                 }
-            )
+            }
         }
     }
 }
@@ -115,7 +108,7 @@ fun NavigationRailLayout(
     onLineSelected: (Int) -> Unit,
     userName: String,
     userId: Int,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
 ) {
     NavigationRail(
         modifier = Modifier.fillMaxHeight(),
@@ -125,22 +118,22 @@ fun NavigationRailLayout(
                 Icons.Default.AccountCircle,
                 contentDescription = "User",
                 modifier = Modifier.size(48.dp).padding(top = 16.dp),
-                tint = Color(0xFFBB86FC)
+                tint = Color(0xFFBB86FC),
             )
             Text(
                 userName,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(top = 8.dp),
             )
             Text(
                 "ID: $userId",
                 fontSize = 12.sp,
                 color = Color.Gray,
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(bottom = 32.dp),
             )
-        }
+        },
     ) {
         (1..6).forEach { line ->
             val isSelected = selectedLine == line
@@ -152,14 +145,14 @@ fun NavigationRailLayout(
                         Surface(
                             shape = CircleShape,
                             color = if (isSelected) Color(0xFF6750A4) else Color(0xFF333333),
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(48.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
                                     "L$line",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
+                                    fontSize = 18.sp,
                                 )
                             }
                         }
@@ -167,13 +160,13 @@ fun NavigationRailLayout(
                             "Line $line",
                             color = if (isSelected) Color.White else Color.Gray,
                             fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(top = 4.dp),
                         )
                     }
                 },
                 colors = NavigationRailItemDefaults.colors(
-                    indicatorColor = Color.Transparent
-                )
+                    indicatorColor = Color.Transparent,
+                ),
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -188,19 +181,19 @@ fun NavigationRailLayout(
                     Icon(
                         Icons.Default.ExitToApp,
                         contentDescription = "Logout",
-                        tint = Color.Gray
+                        tint = Color.Gray,
                     )
                     Text(
                         "Logout",
                         color = Color.Gray,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
             },
             colors = NavigationRailItemDefaults.colors(
-                indicatorColor = Color.Transparent
-            )
+                indicatorColor = Color.Transparent,
+            ),
         )
     }
 }
@@ -208,12 +201,10 @@ fun NavigationRailLayout(
 @Composable
 fun WorkArea(
     selectedLine: Int,
-    tasks: List<TaskEntity>,
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
-    checkerOutputRepository: CheckerOutputRepository,
     onSaveInspection: (String, String?, String, Int) -> Unit,
-    onResetData: () -> Unit
+    onResetData: () -> Unit,
 ) {
     var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedProductType by remember { mutableStateOf<String?>(null) }
@@ -222,11 +213,9 @@ fun WorkArea(
     var selectedPoTarget by remember { mutableStateOf<Int?>(null) }
     var selectedPoId by remember { mutableStateOf<Int?>(null) }
 
-    var isLoadingProductTypes by remember { mutableStateOf(false) }
-    var isLoadingPoNumbers by remember { mutableStateOf(false) }
+    var isLoadingProductTypes by remember { mutableStateOf(value = false) }
+    var isLoadingPoNumbers by remember { mutableStateOf(value = false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val scope = rememberCoroutineScope()
 
     // Fetch product types on launch
     LaunchedEffect(Unit) {
@@ -281,15 +270,14 @@ fun WorkArea(
         remember { mutableStateOf(0) }
     }
 
-    var showDefectDialog by remember { mutableStateOf(false) }
-    var showCompletionDialog by remember { mutableStateOf(false) }
-    var showDoneDialog by remember { mutableStateOf(false) }
+    var showDefectDialog by remember { mutableStateOf(value = false) }
+    var showCompletionDialog by remember { mutableStateOf(value = false) }
+    var showDoneDialog by remember { mutableStateOf(value = false) }
     var doneDialogColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
 
     // Completion Check
     LaunchedEffect(passCount) {
-        if (selectedPoNumber != null && (selectedPoTarget ?: 0) > 0 && passCount >= (selectedPoTarget ?: 0)) {
-            inspectionRepository.markTaskAsCompleted(selectedPoNumber!!)
+        if ((selectedPoNumber != null) && ((selectedPoTarget ?: 0) > 0) && (passCount >= (selectedPoTarget ?: 0))) {
             showCompletionDialog = true
         }
     }
@@ -299,20 +287,20 @@ fun WorkArea(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column {
                 Text(
                     "Line $selectedLine - Inspection",
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color(0xFFBB86FC),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     "Reset All Data",
                     color = Color.Gray,
                     fontSize = 12.sp,
-                    modifier = Modifier.clickable { onResetData() }
+                    modifier = Modifier.clickable { onResetData() },
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -329,7 +317,7 @@ fun WorkArea(
             Text(
                 errorMessage!!,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp),
             )
         }
         
@@ -343,7 +331,7 @@ fun WorkArea(
                 selectedOption = selectedProductType,
                 onOptionSelected = { selectedProductType = it },
                 modifier = Modifier.weight(1f),
-                enabled = !isLoadingProductTypes
+                enabled = !isLoadingProductTypes,
             )
             DropdownFilter(
                 label = "PO Number",
@@ -356,7 +344,7 @@ fun WorkArea(
                     selectedPoId = selectedItem?.poId
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedProductType != null && !isLoadingPoNumbers
+                enabled = (selectedProductType != null) && (!isLoadingPoNumbers),
             )
         }
 
@@ -366,7 +354,7 @@ fun WorkArea(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF333333)),
-            shape = MaterialTheme.shapes.medium
+            shape = MaterialTheme.shapes.medium,
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 InfoRow("Current Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5))
@@ -380,7 +368,7 @@ fun WorkArea(
         // Big Buttons
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             val passColor = Color(0xFF4CAF50)
             val alterColor = Color(0xFFFFB300)
@@ -390,40 +378,40 @@ fun WorkArea(
                 text = "PASS",
                 color = passColor,
                 onClick = {
-                    if (selectedPoNumber != null && selectedPoId != null) {
+                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
                         onSaveInspection("PASS", null, selectedPoNumber!!, selectedPoId!!)
-                        if (passCount + 1 < (selectedPoTarget ?: 0)) {
+                        if ((passCount + 1) < (selectedPoTarget ?: 0)) {
                             doneDialogColor = passColor
                             showDoneDialog = true
                         }
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null && selectedPoId != null
+                enabled = (selectedPoNumber != null) && (selectedPoId != null),
             )
             ActionButton(
                 text = "ALTER",
                 color = alterColor,
                 onClick = {
-                    if (selectedPoNumber != null && selectedPoId != null) {
+                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
                         showDefectDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null && selectedPoId != null
+                enabled = (selectedPoNumber != null) && (selectedPoId != null),
             )
             ActionButton(
                 text = "REJECT",
                 color = rejectColor,
                 onClick = {
-                    if (selectedPoNumber != null && selectedPoId != null) {
+                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
                         onSaveInspection("REJECT", null, selectedPoNumber!!, selectedPoId!!)
                         doneDialogColor = rejectColor
                         showDoneDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedPoNumber != null && selectedPoId != null
+                enabled = (selectedPoNumber != null) && (selectedPoId != null),
             )
         }
     }
@@ -431,34 +419,33 @@ fun WorkArea(
     if (showDefectDialog) {
         DefectDialog(
             onDismiss = { showDefectDialog = false },
-            onDefectSelected = { defect ->
-                if (selectedPoNumber != null && selectedPoId != null) {
-                    onSaveInspection("ALTER", defect, selectedPoNumber!!, selectedPoId!!)
-                }
-                showDefectDialog = false
-                doneDialogColor = Color(0xFFFFB300) // ALTER color
-                showDoneDialog = true
+        ) { defect ->
+            if ((selectedPoNumber != null) && (selectedPoId != null)) {
+                onSaveInspection("ALTER", defect, selectedPoNumber!!, selectedPoId!!)
             }
-        )
+            showDefectDialog = false
+            doneDialogColor = Color(0xFFFFB300) // ALTER color
+            showDoneDialog = true
+        }
     }
 
     if (showCompletionDialog) {
         CompletionDialog(
             poNumber = selectedPoNumber ?: "",
-            onDismiss = {
-                showCompletionDialog = false
-                selectedPoNumber = null
-                selectedPoTarget = null
-                selectedPoId = null
-            }
-        )
+        ) {
+            showCompletionDialog = false
+            selectedPoNumber = null
+            selectedPoTarget = null
+            selectedPoId = null
+        }
     }
 
     if (showDoneDialog && !showCompletionDialog) {
         DoneDialog(
             color = doneDialogColor,
-            onDismiss = { showDoneDialog = false }
-        )
+        ) {
+            showDoneDialog = false
+        }
     }
 }
 
@@ -485,10 +472,10 @@ fun ActionButton(text: String, color: Color, onClick: () -> Unit, modifier: Modi
         modifier = modifier.height(110.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
-            disabledContainerColor = color.copy(alpha = 0.5f)
+            disabledContainerColor = color.copy(alpha = 0.5f),
         ),
         shape = MaterialTheme.shapes.large,
-        enabled = enabled
+        enabled = enabled,
     ) {
         Text(text, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
     }
@@ -502,9 +489,9 @@ fun DropdownFilter(
     selectedOption: String?,
     onOptionSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(value = false) }
 
     Box(modifier = modifier) {
         OutlinedTextField(
@@ -515,9 +502,9 @@ fun DropdownFilter(
             trailingIcon = { 
                 IconButton(onClick = { if (enabled) expanded = true }) {
                     Icon(
-                        if (expanded) Icons.Default.CheckCircle else Icons.Default.AccountCircle, // Placeholder for arrows
+                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
-                        tint = Color.Gray
+                        tint = Color.Gray,
                     )
                 }
             },
@@ -527,10 +514,10 @@ fun DropdownFilter(
                 unfocusedLabelColor = Color.Gray,
                 focusedLabelColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedTextColor = Color.White
+                focusedTextColor = Color.White,
             ),
             modifier = Modifier.fillMaxWidth().clickable { if (enabled) expanded = true },
-            enabled = enabled
+            enabled = enabled,
         )
 
         DropdownMenu(
@@ -538,12 +525,12 @@ fun DropdownFilter(
             onDismissRequest = { expanded = false },
             modifier = Modifier
                 .background(Color(0xFF333333))
-                .fillMaxWidth(0.4f) // Adjust width as needed
+                .fillMaxWidth(0.4f), // Adjust width as needed
         ) {
             if (options.isEmpty()) {
                 DropdownMenuItem(
                     text = { Text("No items (loading...)", color = Color.Gray) },
-                    onClick = { expanded = false }
+                    onClick = { expanded = false },
                 )
             } else {
                 options.forEach { option ->
@@ -552,7 +539,7 @@ fun DropdownFilter(
                         onClick = {
                             onOptionSelected(option)
                             expanded = false
-                        }
+                        },
                     )
                 }
             }
@@ -568,7 +555,7 @@ fun DefectDialog(onDismiss: () -> Unit, onDefectSelected: (String) -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = MaterialTheme.shapes.extraLarge,
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text("Select Defect Type", style = MaterialTheme.typography.headlineSmall, color = Color.White)
@@ -577,13 +564,16 @@ fun DefectDialog(onDismiss: () -> Unit, onDefectSelected: (String) -> Unit) {
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.height(300.dp)
+                    modifier = Modifier.height(300.dp),
                 ) {
                     items(defects) { defect ->
                         Button(
                             onClick = { onDefectSelected(defect) },
                             modifier = Modifier.fillMaxWidth().height(80.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFCF6679), contentColor = Color.White)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFCF6679),
+                                contentColor = Color.White,
+                            ),
                         ) {
                             Text(defect, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
@@ -600,14 +590,14 @@ fun CompletionDialog(poNumber: String, onDismiss: () -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = MaterialTheme.shapes.extraLarge,
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         ) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     Icons.Default.CheckCircle,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
-                    tint = Color(0xFF4CAF50)
+                    tint = Color(0xFF4CAF50),
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Po Completed!", style = MaterialTheme.typography.headlineSmall, color = Color.White)
@@ -625,7 +615,7 @@ fun CompletionDialog(poNumber: String, onDismiss: () -> Unit) {
 @Composable
 fun DoneDialog(color: Color, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(1500.milliseconds)
         onDismiss()
     }
 
@@ -633,19 +623,19 @@ fun DoneDialog(color: Color, onDismiss: () -> Unit) {
         Card(
             modifier = Modifier.width(240.dp),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = color)
+            colors = CardDefaults.cardColors(containerColor = color),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 32.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "DONE",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 32.sp
+                    fontSize = 32.sp,
                 )
             }
         }

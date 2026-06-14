@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
         loginViewModel = LoginViewModel(authRepository, sessionManager)
         
         val database = AppDatabase.getDatabase(this)
-        inspectionRepository = InspectionRepository(database.apiDao(), sessionManager)
+        inspectionRepository = InspectionRepository(database.apiDao())
         poRepository = PoRepository(RetrofitClient.poApiService, sessionManager)
         checkerOutputRepository = CheckerOutputRepository(RetrofitClient.checkerOutputApiService)
 

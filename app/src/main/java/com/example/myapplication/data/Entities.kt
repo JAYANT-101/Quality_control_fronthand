@@ -1,25 +1,20 @@
 package com.example.myapplication.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.InternalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable
-@Entity(tableName = "tasks")
-data class TaskEntity(
-    @PrimaryKey val po_number: String,
-    val cloth_type: String,
-    val target: Int,
-    val is_completed: Boolean = false
-)
-
+@OptIn(InternalSerializationApi::class)
 @Serializable
 @Entity(tableName = "inspections")
 data class InspectionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val task_id: String,
-    val line_no: Int,
-    val result: String,
-    val defect_type: String?,
-    val checker_id: Int
+    @SerialName("task_id") @ColumnInfo(name = "task_id") val taskId: String,
+    @SerialName("line_no") @ColumnInfo(name = "line_no") val lineNo: Int,
+    @SerialName("result") val result: String,
+    @SerialName("defect_type") @ColumnInfo(name = "defect_type") val defectType: String?,
+    @SerialName("checker_id") @ColumnInfo(name = "checker_id") val checkerId: Int,
 )

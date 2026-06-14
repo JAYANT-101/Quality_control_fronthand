@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TaskEntity::class, InspectionEntity::class], version = 10)
+@Database(entities = [InspectionEntity::class], version = 12)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun apiDao(): ApiDao
 
@@ -18,9 +18,9 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "inspection_database"
+                    "inspection_database",
                 )
-                .fallbackToDestructiveMigration(true)
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 INSTANCE = instance
                 instance
