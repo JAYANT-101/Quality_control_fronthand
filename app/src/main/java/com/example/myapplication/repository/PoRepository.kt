@@ -8,7 +8,7 @@ import kotlinx.serialization.json.Json
 
 class PoRepository(
     private val poApiService: PoApiService,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 

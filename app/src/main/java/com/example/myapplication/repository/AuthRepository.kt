@@ -45,7 +45,7 @@ class AuthRepository(private val authApiClient: AuthApiClient) {
     private fun handleAuthResponse(response: Response<AuthResponse>): AuthResult {
         return if (response.isSuccessful) {
             val body = response.body()
-            if (body != null && body.authorized && body.data != null) {
+            if ((body != null) && body.authorized && (body.data != null)) {
                 AuthResult(isSuccess = true, user = body.data)
             } else {
                 AuthResult(isSuccess = false, message = body?.errors?.firstOrNull() ?: "Session invalid")
@@ -55,7 +55,7 @@ class AuthRepository(private val authApiClient: AuthApiClient) {
             val errorResponse = errorBody?.let {
                 try {
                     json.decodeFromString<AuthResponse>(it)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             }
