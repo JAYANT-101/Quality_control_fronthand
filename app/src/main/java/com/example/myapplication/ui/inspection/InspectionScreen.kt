@@ -47,32 +47,40 @@ fun MainTabletLayout(
 
     val scope = rememberCoroutineScope()
 
-    fun onSaveInspection(result: String, defectType: String?, po: String, poId: Int) {
+    fun onSaveInspection(result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         
         scope.launch {
-            // 1. Save locally
-            inspectionRepository.saveInspection(
-                InspectionEntity(
-                    taskId = po,
-                    lineNo = selectedLine,
-                    result = result,
-                    defectType = defectType,
-                    checkerId = userSession.userId,
-                ),
-            )
-
-            // 2. Submit to backend
+            // 1. Submit to backend
             val request = CheckerOutputRequest(
                 userId = userSession.userId,
                 line = selectedLine,
                 poId = poId,
                 fieldName = result.lowercase(), // "pass", "reject", or "alter"
-                defectName = defectType ?: "",
+                defectName = defectType,
                 actualEventTime = timestamp,
             )
             
             checkerOutputRepository.submitCheckerOutput(request)
+                .onSuccess { response ->
+                    // 2. Save locally only after backend success
+                    inspectionRepository.saveInspection(
+                        InspectionEntity(
+                            taskId = po,
+                            lineNo = selectedLine,
+                            result = result,
+                            defectType = defectType.ifEmpty { null },
+                            checkerId = userSession.userId,
+                        ),
+                    )
+                    
+                    // 3. Trigger UI update with fresh PO progress
+                    onSuccess(response.po)
+                }
+                .onFailure { error ->
+                    // Handle failure if needed (e.g., show a toast or error message)
+                    println("InspectionScreen: Failed to submit checker output: ${error.message}")
+                }
         }
     }
 
@@ -203,7 +211,7 @@ fun WorkArea(
     selectedLine: Int,
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
-    onSaveInspection: (String, String?, String, Int) -> Unit,
+    onSaveInspection: (result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) -> Unit,
     onResetData: () -> Unit,
 ) {
     var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -222,19 +230,16 @@ fun WorkArea(
     LaunchedEffect(selectedProductType) {
         if (selectedProductType != null) {
             isLoadingPoNumbers = true
-            // poNumbers = emptyList() // DO NOT clear it here, wait for result
             selectedPoNumber = null
             selectedPoTarget = null
             selectedPoId = null
 
             poRepository.fetchPoNumbers(selectedProductType!!)
                 .onSuccess {
-                    println("InspectionScreen: Successfully updated poNumbers state with ${it.size} items for $selectedProductType")
                     poNumbers = it
                     errorMessage = null
                 }
                 .onFailure {
-                    println("InspectionScreen: Failed to fetch poNumbers: ${it.message}")
                     errorMessage = it.message
                     poNumbers = emptyList()
                 }
@@ -268,13 +273,6 @@ fun WorkArea(
     var showCompletionDialog by remember { mutableStateOf(value = false) }
     var showDoneDialog by remember { mutableStateOf(value = false) }
     var doneDialogColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
-
-    // Completion Check
-    LaunchedEffect(passCount) {
-        if ((selectedPoNumber != null) && ((selectedPoTarget ?: 0) > 0) && (passCount >= (selectedPoTarget ?: 0))) {
-            showCompletionDialog = true
-        }
-    }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
         // Header
@@ -365,7 +363,7 @@ fun WorkArea(
             shape = MaterialTheme.shapes.medium,
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
-                InfoRow("Current Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5))
+                InfoRow("Remaining Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5))
                 Spacer(modifier = Modifier.height(8.dp))
                 InfoRow("Selected PO:", selectedPoNumber ?: "Not Selected", Color.Gray, Color(0xFF00BFA5))
             }
@@ -393,10 +391,14 @@ fun WorkArea(
                 color = passColor,
                 onClick = {
                     if (buttonsEnabled) {
-                        onSaveInspection("PASS", null, selectedPoNumber!!, selectedPoId!!)
-                        if ((passCount + 1) < (selectedPoTarget ?: 0)) {
-                            doneDialogColor = passColor
-                            showDoneDialog = true
+                        onSaveInspection("PASS", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                            selectedPoTarget = poProgress.remainingTarget
+                            if (poProgress.completed) {
+                                showCompletionDialog = true
+                            } else {
+                                doneDialogColor = passColor
+                                showDoneDialog = true
+                            }
                         }
                     }
                 },
@@ -419,9 +421,11 @@ fun WorkArea(
                 color = rejectColor,
                 onClick = {
                     if (buttonsEnabled) {
-                        onSaveInspection("REJECT", null, selectedPoNumber!!, selectedPoId!!)
-                        doneDialogColor = rejectColor
-                        showDoneDialog = true
+                        onSaveInspection("REJECT", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                            selectedPoTarget = poProgress.remainingTarget
+                            doneDialogColor = rejectColor
+                            showDoneDialog = true
+                        }
                     }
                 },
                 modifier = Modifier.weight(1f),
@@ -435,11 +439,13 @@ fun WorkArea(
             onDismiss = { showDefectDialog = false },
         ) { defect ->
             if ((selectedPoNumber != null) && (selectedPoId != null)) {
-                onSaveInspection("ALTER", defect, selectedPoNumber!!, selectedPoId!!)
+                onSaveInspection("ALTER", defect, selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                    selectedPoTarget = poProgress.remainingTarget
+                    showDefectDialog = false
+                    doneDialogColor = Color(0xFFFFB300) // ALTER color
+                    showDoneDialog = true
+                }
             }
-            showDefectDialog = false
-            doneDialogColor = Color(0xFFFFB300) // ALTER color
-            showDoneDialog = true
         }
     }
 
