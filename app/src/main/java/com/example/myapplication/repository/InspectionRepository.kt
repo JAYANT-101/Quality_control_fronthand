@@ -18,4 +18,8 @@ class InspectionRepository(
     suspend fun resetAllCountsAndTasks() {
         apiDao.deleteAllInspections()
     }
+
+    suspend fun clearCountsForPo(poNumber: String, lineNo: Int) {
+        apiDao.deleteInspectionsByPo(poNumber, lineNo)
+    }
 }

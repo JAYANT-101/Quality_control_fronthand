@@ -14,6 +14,9 @@ interface ApiDao {
     @Query("DELETE FROM inspections")
     suspend fun deleteAllInspections()
 
+    @Query("DELETE FROM inspections WHERE task_id = :poNumber AND line_no = :lineNo")
+    suspend fun deleteInspectionsByPo(poNumber: String, lineNo: Int)
+
     @Query("SELECT COUNT(*) FROM inspections WHERE task_id = :poNumber AND line_no = :lineNo AND result = :result")
     fun getInspectionCountFlow(poNumber: String, lineNo: Int, result: String): Flow<Int>
 }

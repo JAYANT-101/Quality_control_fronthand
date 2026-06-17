@@ -217,19 +217,7 @@ fun WorkArea(
     var isLoadingPoNumbers by remember { mutableStateOf(value = false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Fetch product types on launch
-    LaunchedEffect(Unit) {
-        isLoadingProductTypes = true
-        poRepository.fetchProductTypes()
-            .onSuccess {
-                productTypes = it
-                errorMessage = null
-            }
-            .onFailure {
-                errorMessage = it.message
-            }
-        isLoadingProductTypes = false
-    }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(selectedProductType) {
         if (selectedProductType != null) {
@@ -251,6 +239,12 @@ fun WorkArea(
                     poNumbers = emptyList()
                 }
             isLoadingPoNumbers = false
+        }
+    }
+
+    LaunchedEffect(selectedPoNumber, selectedLine) {
+        if (selectedPoNumber != null) {
+            inspectionRepository.clearCountsForPo(selectedPoNumber!!, selectedLine)
         }
     }
 
@@ -332,6 +326,20 @@ fun WorkArea(
                 onOptionSelected = { selectedProductType = it },
                 modifier = Modifier.weight(1f),
                 enabled = !isLoadingProductTypes,
+                onClick = {
+                    scope.launch {
+                        isLoadingProductTypes = true
+                        poRepository.fetchProductTypes()
+                            .onSuccess {
+                                productTypes = it
+                                errorMessage = null
+                            }
+                            .onFailure {
+                                errorMessage = it.message
+                            }
+                        isLoadingProductTypes = false
+                    }
+                },
             )
             DropdownFilter(
                 label = "PO Number",
@@ -374,11 +382,17 @@ fun WorkArea(
             val alterColor = Color(0xFFFFB300)
             val rejectColor = Color(0xFFF44336)
 
+            val buttonsEnabled = (selectedPoNumber != null) && 
+                                (selectedPoId != null) && 
+                                !showDoneDialog && 
+                                !showDefectDialog && 
+                                !showCompletionDialog
+
             ActionButton(
                 text = "PASS",
                 color = passColor,
                 onClick = {
-                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
+                    if (buttonsEnabled) {
                         onSaveInspection("PASS", null, selectedPoNumber!!, selectedPoId!!)
                         if ((passCount + 1) < (selectedPoTarget ?: 0)) {
                             doneDialogColor = passColor
@@ -387,31 +401,31 @@ fun WorkArea(
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = (selectedPoNumber != null) && (selectedPoId != null),
+                enabled = buttonsEnabled,
             )
             ActionButton(
                 text = "ALTER",
                 color = alterColor,
                 onClick = {
-                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
+                    if (buttonsEnabled) {
                         showDefectDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = (selectedPoNumber != null) && (selectedPoId != null),
+                enabled = buttonsEnabled,
             )
             ActionButton(
                 text = "REJECT",
                 color = rejectColor,
                 onClick = {
-                    if ((selectedPoNumber != null) && (selectedPoId != null)) {
+                    if (buttonsEnabled) {
                         onSaveInspection("REJECT", null, selectedPoNumber!!, selectedPoId!!)
                         doneDialogColor = rejectColor
                         showDoneDialog = true
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = (selectedPoNumber != null) && (selectedPoId != null),
+                enabled = buttonsEnabled,
             )
         }
     }
@@ -434,6 +448,7 @@ fun WorkArea(
             poNumber = selectedPoNumber ?: "",
         ) {
             showCompletionDialog = false
+            selectedProductType = null
             selectedPoNumber = null
             selectedPoTarget = null
             selectedPoId = null
@@ -490,6 +505,7 @@ fun DropdownFilter(
     onOptionSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(value = false) }
 
@@ -500,7 +516,12 @@ fun DropdownFilter(
             readOnly = true,
             label = { Text(label, color = Color.Gray) },
             trailingIcon = { 
-                IconButton(onClick = { if (enabled) expanded = true }) {
+                IconButton(onClick = { 
+                    if (enabled) {
+                        onClick?.invoke()
+                        expanded = true 
+                    }
+                }) {
                     Icon(
                         if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
@@ -516,7 +537,12 @@ fun DropdownFilter(
                 unfocusedTextColor = Color.White,
                 focusedTextColor = Color.White,
             ),
-            modifier = Modifier.fillMaxWidth().clickable { if (enabled) expanded = true },
+            modifier = Modifier.fillMaxWidth().clickable { 
+                if (enabled) {
+                    onClick?.invoke()
+                    expanded = true 
+                }
+            },
             enabled = enabled,
         )
 
