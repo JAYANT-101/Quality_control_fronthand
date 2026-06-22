@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
@@ -5,24 +7,30 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+kotlin {
+    jvmToolchain(11)
+}
+
 android {
     namespace = "com.example.myapplication"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.myapplication"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:5000/\"")
+        val properties = Properties()
+        val propertiesFile = project.rootProject.file("local.properties")
+        if (propertiesFile.exists()) {
+            properties.load(propertiesFile.inputStream())
+        }
+        val baseUrl = properties.getProperty("api.base_url") ?: "http://10.0.2.2:5000/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
@@ -39,7 +47,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
-        viewBinding = true
         compose = true
         buildConfig = true
     }
@@ -47,14 +54,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(libs.androidx.recyclerview)
-    implementation(libs.androidx.constraintlayout)
-    implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.navigation.fragment.ktx)
-    implementation(libs.androidx.navigation.ui.ktx)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
