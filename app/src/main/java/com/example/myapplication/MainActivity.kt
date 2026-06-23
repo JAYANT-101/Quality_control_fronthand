@@ -3,10 +3,13 @@ package com.example.myapplication
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +37,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         val authRepository = AuthRepository(RetrofitClient.authApiClient)
         sessionManager = SessionManager(authRepository)
@@ -46,35 +50,39 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             InspectionTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val scope = rememberCoroutineScope()
-                    
-                    LaunchedEffect(Unit) {
-                        sessionManager.verifySessionBeforeAction()
-                    }
-
-                    if (sessionManager.isInitializing) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        val scope = rememberCoroutineScope()
+                        
+                        LaunchedEffect(Unit) {
+                            sessionManager.verifySessionBeforeAction()
                         }
-                    } else if (!sessionManager.isAuthorized) {
-                        LoginScreen(viewModel = loginViewModel)
-                    } else {
-                        val user = sessionManager.currentUser!!
-                        MainTabletLayout(
-                            userSession = UserSession(user.user_id, user.username),
-                            inspectionRepository = inspectionRepository,
-                            poRepository = poRepository,
-                            checkerOutputRepository = checkerOutputRepository,
-                            onLogout = {
-                                scope.launch {
-                                    sessionManager.logout()
-                                }
+
+                        if (sessionManager.isInitializing) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
                             }
-                        )
+                        } else if (!sessionManager.isAuthorized) {
+                            LoginScreen(viewModel = loginViewModel)
+                        } else {
+                            val user = sessionManager.currentUser!!
+                            MainTabletLayout(
+                                userSession = UserSession(user.user_id, user.username),
+                                inspectionRepository = inspectionRepository,
+                                poRepository = poRepository,
+                                checkerOutputRepository = checkerOutputRepository,
+                                onLogout = {
+                                    scope.launch {
+                                        sessionManager.logout()
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
