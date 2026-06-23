@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -47,7 +47,11 @@ fun MainTabletLayout(
 
     val scope = rememberCoroutineScope()
 
+    var isSubmitting by remember { mutableStateOf(false) }
+
     fun onSaveInspection(result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) {
+        if (isSubmitting) return
+        isSubmitting = true
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         
         scope.launch {
@@ -76,10 +80,12 @@ fun MainTabletLayout(
                     
                     // 3. Trigger UI update with fresh PO progress
                     onSuccess(response.po)
+                    isSubmitting = false
                 }
                 .onFailure { error ->
                     // Handle failure if needed (e.g., show a toast or error message)
                     println("InspectionScreen: Failed to submit checker output: ${error.message}")
+                    isSubmitting = false
                 }
         }
     }
@@ -101,6 +107,7 @@ fun MainTabletLayout(
                 inspectionRepository = inspectionRepository,
                 poRepository = poRepository,
                 onSaveInspection = ::onSaveInspection,
+                isSubmitting = isSubmitting,
             ) {
                 scope.launch {
                     inspectionRepository.resetAllCountsAndTasks()
@@ -187,7 +194,7 @@ fun NavigationRailLayout(
             icon = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Default.ExitToApp,
+                        Icons.AutoMirrored.Filled.ExitToApp,
                         contentDescription = "Logout",
                         tint = Color.Gray,
                     )
@@ -212,6 +219,7 @@ fun WorkArea(
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
     onSaveInspection: (result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) -> Unit,
+    isSubmitting: Boolean,
     onResetData: () -> Unit,
 ) {
     var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -303,7 +311,7 @@ fun WorkArea(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Divider(color = Color(0xFF00BFA5), thickness = 2.dp)
+        HorizontalDivider(color = Color(0xFF00BFA5), thickness = 2.dp)
         
         if (errorMessage != null) {
             Text(
@@ -384,7 +392,8 @@ fun WorkArea(
                                 (selectedPoId != null) && 
                                 !showDoneDialog && 
                                 !showDefectDialog && 
-                                !showCompletionDialog
+                                !showCompletionDialog &&
+                                !isSubmitting
 
             ActionButton(
                 text = "PASS",
