@@ -11,6 +11,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,10 +36,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var poRepository: PoRepository
     private lateinit var checkerOutputRepository: CheckerOutputRepository
 
+    @OptIn(androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Initialize repositories lazily or in background if possible, 
+        // but for now ensure they don't block the main thread excessively.
         val authRepository = AuthRepository(RetrofitClient.authApiClient)
         sessionManager = SessionManager(authRepository)
         loginViewModel = LoginViewModel(authRepository, sessionManager)
@@ -50,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             InspectionTheme {
+                val windowSize = calculateWindowSizeClass(this)
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Surface(
                         modifier = Modifier
@@ -59,10 +64,13 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val scope = rememberCoroutineScope()
                         
+                        // Use a side effect that starts AFTER the first composition 
+                        // to avoid blocking the very first frame.
                         LaunchedEffect(Unit) {
                             sessionManager.verifySessionBeforeAction()
                         }
 
+                        // The UI should show the initializing state immediately
                         if (sessionManager.isInitializing) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator()
@@ -76,6 +84,7 @@ class MainActivity : ComponentActivity() {
                                 inspectionRepository = inspectionRepository,
                                 poRepository = poRepository,
                                 checkerOutputRepository = checkerOutputRepository,
+                                windowWidthSizeClass = windowSize.widthSizeClass,
                                 onLogout = {
                                     scope.launch {
                                         sessionManager.logout()

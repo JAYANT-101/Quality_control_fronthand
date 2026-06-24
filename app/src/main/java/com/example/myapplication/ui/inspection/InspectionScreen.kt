@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,13 +42,14 @@ fun MainTabletLayout(
     inspectionRepository: InspectionRepository,
     poRepository: PoRepository,
     checkerOutputRepository: CheckerOutputRepository,
+    windowWidthSizeClass: WindowWidthSizeClass,
     onLogout: () -> Unit,
 ) {
     var selectedLine by remember { mutableIntStateOf(1) }
-
     val scope = rememberCoroutineScope()
-
     var isSubmitting by remember { mutableStateOf(false) }
+
+    val isTablet = windowWidthSizeClass != WindowWidthSizeClass.Compact
 
     fun onSaveInspection(result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) {
         if (isSubmitting) return
@@ -55,19 +57,17 @@ fun MainTabletLayout(
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         
         scope.launch {
-            // 1. Submit to backend
             val request = CheckerOutputRequest(
                 userId = userSession.userId,
                 line = selectedLine,
                 poId = poId,
-                fieldName = result.lowercase(), // "pass", "reject", or "alter"
+                fieldName = result.lowercase(),
                 defectName = defectType,
                 actualEventTime = timestamp,
             )
             
             checkerOutputRepository.submitCheckerOutput(request)
                 .onSuccess { response ->
-                    // 2. Save locally only after backend success
                     inspectionRepository.saveInspection(
                         InspectionEntity(
                             taskId = po,
@@ -77,40 +77,114 @@ fun MainTabletLayout(
                             checkerId = userSession.userId,
                         ),
                     )
-                    
-                    // 3. Trigger UI update with fresh PO progress
                     onSuccess(response.po)
                     isSubmitting = false
                 }
                 .onFailure { error ->
-                    // Handle failure if needed (e.g., show a toast or error message)
                     println("InspectionScreen: Failed to submit checker output: ${error.message}")
                     isSubmitting = false
                 }
         }
     }
 
-    Row(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        Box(modifier = Modifier.fillMaxHeight().width(120.dp)) {
-            NavigationRailLayout(
-                selectedLine = selectedLine,
-                onLineSelected = { selectedLine = it },
-                userName = userSession.username,
-                userId = userSession.userId,
-                onLogout = onLogout,
-            )
-        }
+    if (isTablet) {
+        Row(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            Box(modifier = Modifier.fillMaxHeight().width(120.dp)) {
+                NavigationRailLayout(
+                    selectedLine = selectedLine,
+                    onLineSelected = { selectedLine = it },
+                    userName = userSession.username,
+                    userId = userSession.userId,
+                    onLogout = onLogout,
+                )
+            }
 
-        Box(modifier = Modifier.fillMaxHeight().weight(1f)) {
-            WorkArea(
-                selectedLine = selectedLine,
-                inspectionRepository = inspectionRepository,
-                poRepository = poRepository,
-                onSaveInspection = ::onSaveInspection,
-                isSubmitting = isSubmitting,
-            ) {
-                scope.launch {
-                    inspectionRepository.resetAllCountsAndTasks()
+            Box(modifier = Modifier.fillMaxHeight().weight(1f)) {
+                WorkArea(
+                    selectedLine = selectedLine,
+                    inspectionRepository = inspectionRepository,
+                    poRepository = poRepository,
+                    onSaveInspection = ::onSaveInspection,
+                    isSubmitting = isSubmitting,
+                    isTablet = true,
+                ) {
+                    scope.launch {
+                        inspectionRepository.resetAllCountsAndTasks()
+                    }
+                }
+            }
+        }
+    } else {
+        Scaffold(
+            topBar = {
+                Surface(
+                    color = Color(0xFF1A1A1A),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Line $selectedLine",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = onLogout) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Logout",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                }
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = Color(0xFF1A1A1A),
+                    modifier = Modifier.height(80.dp)
+                ) {
+                    (1..6).forEach { line ->
+                        NavigationBarItem(
+                            selected = selectedLine == line,
+                            onClick = { selectedLine = line },
+                            icon = {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (selectedLine == line) Color(0xFF6750A4) else Color(0xFF333333),
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("L$line", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            },
+                            label = { Text("Line $line", color = if (selectedLine == line) Color.White else Color.Gray, fontSize = 9.sp) },
+                            colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
+                        )
+                    }
+                }
+            },
+            containerColor = Color.Black
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                WorkArea(
+                    selectedLine = selectedLine,
+                    inspectionRepository = inspectionRepository,
+                    poRepository = poRepository,
+                    onSaveInspection = ::onSaveInspection,
+                    isSubmitting = isSubmitting,
+                    isTablet = false,
+                ) {
+                    scope.launch {
+                        inspectionRepository.resetAllCountsAndTasks()
+                    }
                 }
             }
         }
@@ -220,6 +294,7 @@ fun WorkArea(
     poRepository: PoRepository,
     onSaveInspection: (result: String, defectType: String, po: String, poId: Int, onSuccess: (PoProgress) -> Unit) -> Unit,
     isSubmitting: Boolean,
+    isTablet: Boolean,
     onResetData: () -> Unit,
 ) {
     var productTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -282,7 +357,7 @@ fun WorkArea(
     var showDoneDialog by remember { mutableStateOf(value = false) }
     var doneDialogColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = if (isTablet) 32.dp else 16.dp, vertical = if (isTablet) 24.dp else 16.dp)) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -291,8 +366,8 @@ fun WorkArea(
         ) {
             Column {
                 Text(
-                    "Line $selectedLine - Inspection",
-                    style = MaterialTheme.typography.headlineMedium,
+                    if (isTablet) "Line $selectedLine - Inspection" else "Inspection",
+                    style = if (isTablet) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
                     color = Color(0xFFBB86FC),
                     fontWeight = FontWeight.Bold,
                 )
@@ -303,10 +378,10 @@ fun WorkArea(
                     modifier = Modifier.clickable { onResetData() },
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                CounterHeader("PASS", passCount, Color(0xFF4CAF50))
-                CounterHeader("ALTER", alterCount, Color(0xFFFFB300))
-                CounterHeader("REJECT", rejectCount, Color(0xFFF44336))
+            Row(horizontalArrangement = Arrangement.spacedBy(if (isTablet) 24.dp else 8.dp)) {
+                CounterHeader("PASS", passCount, Color(0xFF4CAF50), isTablet)
+                CounterHeader("ALTER", alterCount, Color(0xFFFFB300), isTablet)
+                CounterHeader("REJECT", rejectCount, Color(0xFFF44336), isTablet)
             }
         }
 
@@ -321,48 +396,88 @@ fun WorkArea(
             )
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(if (isTablet) 24.dp else 16.dp))
 
         // Filters
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            DropdownFilter(
-                label = "Product Type",
-                options = productTypes,
-                selectedOption = selectedProductType,
-                onOptionSelected = { selectedProductType = it },
-                modifier = Modifier.weight(1f),
-                enabled = !isLoadingProductTypes,
-                onClick = {
-                    scope.launch {
-                        isLoadingProductTypes = true
-                        poRepository.fetchProductTypes()
-                            .onSuccess {
-                                productTypes = it
-                                errorMessage = null
-                            }
-                            .onFailure {
-                                errorMessage = it.message
-                            }
-                        isLoadingProductTypes = false
-                    }
-                },
-            )
-            DropdownFilter(
-                label = "PO Number",
-                options = poNumbers.map { "${it.poNumber} (target: ${it.target})" },
-                selectedOption = if (selectedPoNumber != null) "$selectedPoNumber (target: $selectedPoTarget)" else null,
-                onOptionSelected = { selectedLabel ->
-                    val selectedItem = poNumbers.find { "${it.poNumber} (target: ${it.target})" == selectedLabel }
-                    selectedPoNumber = selectedItem?.poNumber
-                    selectedPoTarget = selectedItem?.target
-                    selectedPoId = selectedItem?.poId
-                },
-                modifier = Modifier.weight(1f),
-                enabled = (selectedProductType != null) && (!isLoadingPoNumbers),
-            )
+        if (isTablet) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                DropdownFilter(
+                    label = "Product Type",
+                    options = productTypes,
+                    selectedOption = selectedProductType,
+                    onOptionSelected = { selectedProductType = it },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLoadingProductTypes,
+                    onClick = {
+                        scope.launch {
+                            isLoadingProductTypes = true
+                            poRepository.fetchProductTypes()
+                                .onSuccess {
+                                    productTypes = it
+                                    errorMessage = null
+                                }
+                                .onFailure {
+                                    errorMessage = it.message
+                                }
+                            isLoadingProductTypes = false
+                        }
+                    },
+                )
+                DropdownFilter(
+                    label = "PO Number",
+                    options = poNumbers.map { "${it.poNumber} (target: ${it.target})" },
+                    selectedOption = if (selectedPoNumber != null) "$selectedPoNumber (target: $selectedPoTarget)" else null,
+                    onOptionSelected = { selectedLabel ->
+                        val selectedItem = poNumbers.find { "${it.poNumber} (target: ${it.target})" == selectedLabel }
+                        selectedPoNumber = selectedItem?.poNumber
+                        selectedPoTarget = selectedItem?.target
+                        selectedPoId = selectedItem?.poId
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = (selectedProductType != null) && (!isLoadingPoNumbers),
+                )
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DropdownFilter(
+                    label = "Product Type",
+                    options = productTypes,
+                    selectedOption = selectedProductType,
+                    onOptionSelected = { selectedProductType = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoadingProductTypes,
+                    onClick = {
+                        scope.launch {
+                            isLoadingProductTypes = true
+                            poRepository.fetchProductTypes()
+                                .onSuccess {
+                                    productTypes = it
+                                    errorMessage = null
+                                }
+                                .onFailure {
+                                    errorMessage = it.message
+                                }
+                            isLoadingProductTypes = false
+                        }
+                    },
+                )
+                DropdownFilter(
+                    label = "PO Number",
+                    options = poNumbers.map { "${it.poNumber} (target: ${it.target})" },
+                    selectedOption = if (selectedPoNumber != null) "$selectedPoNumber (target: $selectedPoTarget)" else null,
+                    onOptionSelected = { selectedLabel ->
+                        val selectedItem = poNumbers.find { "${it.poNumber} (target: ${it.target})" == selectedLabel }
+                        selectedPoNumber = selectedItem?.poNumber
+                        selectedPoTarget = selectedItem?.target
+                        selectedPoId = selectedItem?.poId
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = (selectedProductType != null) && (!isLoadingPoNumbers),
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(if (isTablet) 32.dp else 16.dp))
 
         // Info Card
         Card(
@@ -370,76 +485,156 @@ fun WorkArea(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF333333)),
             shape = MaterialTheme.shapes.medium,
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                InfoRow("Remaining Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5))
+            Column(modifier = Modifier.padding(if (isTablet) 24.dp else 16.dp)) {
+                InfoRow("Remaining Target:", (selectedPoTarget ?: 0).toString(), Color.Gray, Color(0xFF00BFA5), isTablet)
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow("Selected PO:", selectedPoNumber ?: "Not Selected", Color.Gray, Color(0xFF00BFA5))
+                InfoRow("Selected PO:", selectedPoNumber ?: "Not Selected", Color.Gray, Color(0xFF00BFA5), isTablet)
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
         // Big Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            val passColor = Color(0xFF4CAF50)
-            val alterColor = Color(0xFFFFB300)
-            val rejectColor = Color(0xFFF44336)
+        if (isTablet) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                val passColor = Color(0xFF4CAF50)
+                val alterColor = Color(0xFFFFB300)
+                val rejectColor = Color(0xFFF44336)
 
-            val buttonsEnabled = (selectedPoNumber != null) && 
-                                (selectedPoId != null) && 
-                                !showDoneDialog && 
-                                !showDefectDialog && 
-                                !showCompletionDialog &&
-                                !isSubmitting
+                val buttonsEnabled = (selectedPoNumber != null) &&
+                        (selectedPoId != null) &&
+                        !showDoneDialog &&
+                        !showDefectDialog &&
+                        !showCompletionDialog &&
+                        !isSubmitting
 
-            ActionButton(
-                text = "PASS",
-                color = passColor,
-                onClick = {
-                    if (buttonsEnabled) {
-                        onSaveInspection("PASS", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
-                            selectedPoTarget = poProgress.remainingTarget
-                            if (poProgress.completed) {
-                                showCompletionDialog = true
-                            } else {
-                                doneDialogColor = passColor
+                ActionButton(
+                    text = "PASS",
+                    color = passColor,
+                    onClick = {
+                        if (buttonsEnabled) {
+                            onSaveInspection("PASS", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                                selectedPoTarget = poProgress.remainingTarget
+                                if (poProgress.completed) {
+                                    showCompletionDialog = true
+                                } else {
+                                    doneDialogColor = passColor
+                                    showDoneDialog = true
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = buttonsEnabled,
+                    isTablet = true
+                )
+                ActionButton(
+                    text = "ALTER",
+                    color = alterColor,
+                    onClick = {
+                        if (buttonsEnabled) {
+                            showDefectDialog = true
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = buttonsEnabled,
+                    isTablet = true
+                )
+                ActionButton(
+                    text = "REJECT",
+                    color = rejectColor,
+                    onClick = {
+                        if (buttonsEnabled) {
+                            onSaveInspection("REJECT", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                                selectedPoTarget = poProgress.remainingTarget
+                                doneDialogColor = rejectColor
                                 showDoneDialog = true
                             }
                         }
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = buttonsEnabled,
-            )
-            ActionButton(
-                text = "ALTER",
-                color = alterColor,
-                onClick = {
-                    if (buttonsEnabled) {
-                        showDefectDialog = true
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = buttonsEnabled,
-            )
-            ActionButton(
-                text = "REJECT",
-                color = rejectColor,
-                onClick = {
-                    if (buttonsEnabled) {
-                        onSaveInspection("REJECT", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
-                            selectedPoTarget = poProgress.remainingTarget
-                            doneDialogColor = rejectColor
-                            showDoneDialog = true
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = buttonsEnabled,
+                    isTablet = true
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val passColor = Color(0xFF4CAF50)
+                val alterColor = Color(0xFFFFB300)
+                val rejectColor = Color(0xFFF44336)
+
+                val buttonsEnabled = (selectedPoNumber != null) &&
+                        (selectedPoId != null) &&
+                        !showDoneDialog &&
+                        !showDefectDialog &&
+                        !showCompletionDialog &&
+                        !isSubmitting
+
+                ActionButton(
+                    text = "PASS",
+                    color = passColor,
+                    onClick = {
+                        if (buttonsEnabled) {
+                            onSaveInspection("PASS", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                                selectedPoTarget = poProgress.remainingTarget
+                                if (poProgress.completed) {
+                                    showCompletionDialog = true
+                                } else {
+                                    doneDialogColor = passColor
+                                    showDoneDialog = true
+                                }
+                            }
                         }
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = buttonsEnabled,
-            )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = buttonsEnabled,
+                    isTablet = false
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ActionButton(
+                        text = "ALTER",
+                        color = alterColor,
+                        onClick = {
+                            if (buttonsEnabled) {
+                                showDefectDialog = true
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = buttonsEnabled,
+                        isTablet = false
+                    )
+                    ActionButton(
+                        text = "REJECT",
+                        color = rejectColor,
+                        onClick = {
+                            if (buttonsEnabled) {
+                                onSaveInspection("REJECT", "", selectedPoNumber!!, selectedPoId!!) { poProgress ->
+                                    selectedPoTarget = poProgress.remainingTarget
+                                    doneDialogColor = rejectColor
+                                    showDoneDialog = true
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = buttonsEnabled,
+                        isTablet = false
+                    )
+                }
+            }
         }
     }
 
@@ -480,26 +675,26 @@ fun WorkArea(
 }
 
 @Composable
-fun CounterHeader(label: String, count: Int, color: Color) {
+fun CounterHeader(label: String, count: Int, color: Color, isTablet: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
-        Text(count.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(label, fontSize = if (isTablet) 14.sp else 12.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(count.toString(), fontSize = if (isTablet) 24.sp else 18.sp, fontWeight = FontWeight.Bold, color = color)
     }
 }
 
 @Composable
-fun InfoRow(label: String, value: String, labelColor: Color, valueColor: Color) {
+fun InfoRow(label: String, value: String, labelColor: Color, valueColor: Color, isTablet: Boolean) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = labelColor, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-        Text(value, color = valueColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = labelColor, fontSize = if (isTablet) 20.sp else 16.sp, fontWeight = FontWeight.Medium)
+        Text(value, color = valueColor, fontSize = if (isTablet) 22.sp else 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun ActionButton(text: String, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun ActionButton(text: String, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, isTablet: Boolean) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(110.dp),
+        modifier = modifier.height(if (isTablet) 110.dp else 80.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
             disabledContainerColor = color.copy(alpha = 0.5f),
@@ -507,7 +702,7 @@ fun ActionButton(text: String, color: Color, onClick: () -> Unit, modifier: Modi
         shape = MaterialTheme.shapes.large,
         enabled = enabled,
     ) {
-        Text(text, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+        Text(text, fontSize = if (isTablet) 36.sp else 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
     }
 }
 
@@ -594,31 +789,52 @@ fun DefectDialog(onDismiss: () -> Unit, onDefectSelected: (String) -> Unit) {
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .padding(8.dp),
             shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text("Select Defect Type", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Select Defect Type",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.height(300.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.heightIn(max = 450.dp),
                 ) {
                     items(defects) { defect ->
                         Button(
                             onClick = { onDefectSelected(defect) },
-                            modifier = Modifier.fillMaxWidth().height(80.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFCF6679),
                                 contentColor = Color.White,
                             ),
+                            shape = MaterialTheme.shapes.medium
                         ) {
-                            Text(defect, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                defect,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                lineHeight = 22.sp
+                            )
                         }
                     }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("CANCEL", color = Color.Gray)
                 }
             }
         }
