@@ -89,7 +89,7 @@ fun MainTabletLayout(
 
     if (isTablet) {
         Row(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            Box(modifier = Modifier.fillMaxHeight().width(120.dp)) {
+            Box(modifier = Modifier.fillMaxHeight().width(150.dp)) {
                 NavigationRailLayout(
                     selectedLine = selectedLine,
                     onLineSelected = { selectedLine = it },
@@ -148,7 +148,7 @@ fun MainTabletLayout(
             bottomBar = {
                 NavigationBar(
                     containerColor = Color(0xFF1A1A1A),
-                    modifier = Modifier.height(80.dp)
+                    modifier = Modifier.height(100.dp)
                 ) {
                     (1..6).forEach { line ->
                         NavigationBarItem(
@@ -158,14 +158,14 @@ fun MainTabletLayout(
                                 Surface(
                                     shape = CircleShape,
                                     color = if (selectedLine == line) Color(0xFF6750A4) else Color(0xFF333333),
-                                    modifier = Modifier.size(28.dp),
+                                    modifier = Modifier.size(36.dp),
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text("L$line", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("L$line", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             },
-                            label = { Text("Line $line", color = if (selectedLine == line) Color.White else Color.Gray, fontSize = 9.sp) },
+                            label = { Text("Line $line", color = if (selectedLine == line) Color.White else Color.Gray, fontSize = 12.sp) },
                             colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
                         )
                     }
@@ -234,21 +234,21 @@ fun NavigationRailLayout(
                         Surface(
                             shape = CircleShape,
                             color = if (isSelected) Color(0xFF6750A4) else Color(0xFF333333),
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier.size(56.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
                                     "L$line",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
+                                    fontSize = 22.sp,
                                 )
                             }
                         }
                         Text(
                             "Line $line",
                             color = if (isSelected) Color.White else Color.Gray,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
@@ -257,7 +257,7 @@ fun NavigationRailLayout(
                     indicatorColor = Color.Transparent,
                 ),
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -499,7 +499,7 @@ fun WorkArea(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 32.dp),
+                    .padding(bottom = 64.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 val passColor = Color(0xFF4CAF50)
@@ -566,7 +566,7 @@ fun WorkArea(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 56.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val passColor = Color(0xFF4CAF50)
@@ -761,7 +761,7 @@ fun DropdownFilter(
             onDismissRequest = { expanded = false },
             modifier = Modifier
                 .background(Color(0xFF333333))
-                .fillMaxWidth(0.4f), // Adjust width as needed
+                .fillMaxWidth(0.8f), // Adjust width as needed
         ) {
             if (options.isEmpty()) {
                 DropdownMenuItem(

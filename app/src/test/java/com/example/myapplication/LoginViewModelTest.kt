@@ -1,9 +1,9 @@
 package com.example.myapplication
 
-import com.example.myapplication.data.LoginRequest
-import com.example.myapplication.data.LoginResponse
-import com.example.myapplication.data.UserData
+import com.example.myapplication.data.AuthResult
+import com.example.myapplication.data.AuthorizedUser
 import com.example.myapplication.repository.AuthRepository
+import com.example.myapplication.session.SessionManager
 import com.example.myapplication.ui.login.LoginState
 import com.example.myapplication.ui.login.LoginViewModel
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +21,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.MockitoAnnotations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.verify
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LoginViewModelTest {
@@ -30,13 +31,16 @@ class LoginViewModelTest {
     @Mock
     private lateinit var repository: AuthRepository
 
+    @Mock
+    private lateinit var sessionManager: SessionManager
+
     private lateinit var viewModel: LoginViewModel
 
     @Before
     fun setup() {
         MockitoAnnotations.openMocks(this)
         Dispatchers.setMain(testDispatcher)
-        viewModel = LoginViewModel(repository)
+        viewModel = LoginViewModel(repository, sessionManager)
     }
 
     @After
@@ -46,32 +50,40 @@ class LoginViewModelTest {
 
     @Test
     fun `login with empty fields sets error state`() = runTest {
-        viewModel.login("", "password")
+        viewModel.usernameInput = ""
+        viewModel.passwordInput = "password"
+        viewModel.login()
         assertTrue(viewModel.state is LoginState.Error)
         assertEquals("Username and password are required", (viewModel.state as LoginState.Error).message)
     }
 
     @Test
-    fun `login success sets success state with user data`() = runTest {
-        val userData = UserData(12, "checker")
-        val response = LoginResponse("authorized", true, "User authorized.", userData)
+    fun `login success sets success state`() = runTest {
+        val user = AuthorizedUser(12, "checker")
+        val result = AuthResult(isSuccess = true, user = user)
         
-        `when`(repository.authorize(any())).thenReturn(Result.success(response))
+        `when`(repository.login(any(), any())).thenReturn(result)
 
-        viewModel.login(" checker ", "admin")
+        viewModel.usernameInput = " checker "
+        viewModel.passwordInput = "admin"
+        viewModel.login()
         
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(viewModel.state is LoginState.Success)
-        assertEquals(userData, (viewModel.state as LoginState.Success).userData)
+        verify(sessionManager).currentUser = user
+        verify(sessionManager).isAuthorized = true
     }
 
     @Test
     fun `login failure sets error state with message`() = runTest {
         val errorMessage = "Invalid username or password"
-        `when`(repository.authorize(any())).thenReturn(Result.failure(Exception(errorMessage)))
+        val result = AuthResult(isSuccess = false, message = errorMessage)
+        `when`(repository.login(any(), any())).thenReturn(result)
 
-        viewModel.login("wrong", "wrong")
+        viewModel.usernameInput = "wrong"
+        viewModel.passwordInput = "wrong"
+        viewModel.login()
         
         testDispatcher.scheduler.advanceUntilIdle()
 
